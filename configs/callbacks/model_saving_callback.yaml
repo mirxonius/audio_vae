@@ -1,0 +1,12 @@
+model_saving_callback:   
+    save_dir: .  # Directory where config.yaml is stored
+    metric: val/total_loss  # Metric to monitor
+    mode: min  # "min" or "max"
+    temp_code_src_path: ./temp_src  # Temp directory for source code
+    log_reconstructions: true  # Log audio reconstructions with best model
+    num_reconstruction_samples: 3  # Number of audio samples to log
+    
+    # Model Registry settings (optional)
+    create_model_version: false  # Set to true to create model versions
+    model_name: audio_vae  # Name in MLflow Model Registry
+    min_metric_threshold: 0.5  

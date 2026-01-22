@@ -1,0 +1,13 @@
+# configs/callbacks/model_checkpoint.yaml
+model_checkpoint:
+  _target_: pytorch_lightning.callbacks.ModelCheckpoint
+  dirpath: ${paths.checkpoint_dir}/${run_name}
+  filename: "{epoch:03d}-{val/loss:.4f}"
+  monitor: val/total_loss
+  mode: min
+  save_top_k: 3
+  save_last: true
+  save_weights_only: false
+  auto_insert_metric_name: false
+  every_n_epochs: 1
+  verbose: false

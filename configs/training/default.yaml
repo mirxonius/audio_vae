@@ -1,0 +1,36 @@
+# Default training configuration
+
+# Loss weights
+loss:
+  kl_weight: 1e-4
+  kl_warmup_steps: 10000
+  free_bits: 0.0
+
+# Optimizer
+optimizer:
+  learning_rate: 1e-4
+  betas: [0.8, 0.99]
+  weight_decay: 0.01
+  warmup_steps: 1000
+
+# Trainer
+trainer:
+  max_epochs: 1000
+  max_steps: -1
+  gradient_clip_val: 1.0
+  accumulate_grad_batches: 2
+  precision: 16-mixed  # 32, 16-mixed, bf16-mixed
+  val_check_interval: 1.0
+  log_every_n_steps: 50
+  devices: [0]
+  strategy: "ddp"
+  
+  
+# Logging
+logging:
+  log_audio_every_n_epochs: 10
+
+# Early stopping
+early_stopping:
+  patience: 20
+  min_delta: 0.0

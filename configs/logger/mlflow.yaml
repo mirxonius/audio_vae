@@ -1,0 +1,11 @@
+# configs/logger/mlflow.yaml
+mlflow:
+  _target_: pytorch_lightning.loggers.MLFlowLogger
+  experiment_name: ${experiment_name}
+  tracking_uri: "http://10.100.111.208:30500"
+  save_dir: ${paths.log_dir}/mlflow
+  log_model: false
+  prefix: ""
+  artifact_location: null
+  run_name: null
+  
