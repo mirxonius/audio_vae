@@ -1,0 +1,16 @@
+# Discriminator Configuration
+_target_: src.model.discriminators.EncodecDiscriminator.EnCodecDiscriminator
+
+# MS-STFT Discriminator parameters
+stft_filters: 32
+in_channels: 2  # Stereo audio
+n_ffts: [2048, 1024, 512, 256, 128]  # Multi-scale FFT sizes
+
+# Multi-Scale Discriminator (MSD) parameters
+use_msd: true
+msd_scales: [1, 2, 4]  # Waveform downsampling scales
+
+# Multi-Period Discriminator (MPD) parameters
+use_mpd: true
+mpd_periods: [2, 3, 5, 7, 11]  # Periods for MPD
+mpd_channels: [32, 128, 512, 1024, 1024]  # Channel progression
