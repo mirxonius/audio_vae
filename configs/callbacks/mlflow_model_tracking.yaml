@@ -1,0 +1,8 @@
+# configs/callbacks/mlflow_vae.yaml
+mlflow_vae_tracker:
+  _target_: src.callbacks.MLflowVAETrackerCallback.MLflowVAETrackerCallback
+  monitor: "val/total_loss"
+  mode: "min"
+  every_n_epochs: 10
+  save_best_only: True
+  artifact_path: "audio_vae_model"

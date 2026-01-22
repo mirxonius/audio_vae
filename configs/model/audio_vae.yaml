@@ -1,0 +1,24 @@
+# configs/model/vae.yaml
+_target_: src.model.VAELightningModule.VAELightningModule
+
+defaults:
+  - architecture: architecture.yaml
+  - loss_calculator: loss_calculator.yaml
+  - optimizer: optimizer.yaml
+  - scheduler: scheduler.yaml
+
+scheduler_interval: step
+scheduler_frequency: 1
+
+# Logging
+log_audio_every_n_epochs: 5
+sample_rate: ${datamodule.sample_rate}
+num_audio_samples: 2
+use_adversarial: true
+adversarial_warmup_steps: 0
+adversarial_weight: 0.1
+feature_matching_weight: 10.0
+discriminator_lr: 1e-4
+discriminator_update_every:  1
+generator_update_every:  1
+#finetune_decoder_after_n_steps: 200000

@@ -1,0 +1,23 @@
+# configs/callbacks/audio_reconstruction.yaml
+audio_reconstruction: 
+  _target_: src.callbacks.AudioReconstructionCallback.AudioReconstructionCallback
+
+  # MUSDB18 dataset path
+  musdb_root: ${datamodule.root}
+
+  # Audio parameters
+  sample_rate: 44100
+  chunk_duration: 5.0  # Duration in seconds for evaluation chunks
+
+  # Logging parameters
+  num_samples: 3  # Number of audio samples to log per logging epoch
+  log_every_n_epochs: 5  # Log audio every N epochs
+
+  # Stem selection
+  stems:
+    - vocals
+    - bass
+    - drums
+    - other
+
+  include_mixture: true  # Whether to also sample full mixtures

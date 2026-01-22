@@ -1,0 +1,12 @@
+# MUSDB18 dataset configuration
+_target_: src.dataset.MUSDB18Datamodule.MUSDB18DataModule
+
+root: "/data1/midi_generation_datasets/musdb/musdb18"
+sample_rate: 44100
+chunk_duration: 1.5 #6.0  # seconds
+channels: 2
+batch_size: 8
+# 1. New parameter to define the "synthetic epoch" length
+train_samples: 8000
+val_samples: 800
+num_workers: 4   

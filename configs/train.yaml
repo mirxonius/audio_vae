@@ -1,0 +1,29 @@
+# configs/train.yaml
+experiment_name: audio_vae
+run_name: big_model #audio_vae_30mil
+
+defaults:
+  - _self_
+  - paths: paths
+  - model: audio_vae
+  - datamodule: musdb18
+  - trainer: default
+  - callbacks: callbacks
+  - logger: mlflow
+  #- hydra: default
+  
+  # Experiment configs override everything
+  - experiment: null
+
+# General settings
+seed: 2211 
+sample_rate: 44100
+
+# Control flags
+print_config: true
+log_hyperparameters: true
+run_test: false
+return_metric: val/loss  # For hyperparameter optimization
+
+# Resume from checkpoint
+ckpt_path: null
