@@ -70,7 +70,7 @@ streamlit  # For inference UI
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
+git clone git@github.com:mirxonius/audio_vae.git
 cd audio_vae
 ```
 
@@ -127,22 +127,22 @@ audio_vae/
 
 Basic training with default configuration:
 ```bash
-python train.py
+python3 -m train
 ```
 
 Override specific parameters:
 ```bash
 # Change experiment and run names
-python train.py experiment_name=my_experiment run_name=my_run
+python3 -m train experiment_name=my_experiment run_name=my_run
 
 # Use different model configuration
-python train.py model=audio_vae
+python3 -m train model=audio_vae
 
 # Change training parameters
-python train.py trainer.max_epochs=100 trainer.devices=[0,1]
+python3 -m train trainer.max_epochs=100 trainer.devices=[0,1]
 
 # Resume from checkpoint
-python train.py ckpt_path=/path/to/checkpoint.ckpt
+python3 -m train ckpt_path=/path/to/checkpoint.ckpt
 ```
 
 ### Inference
@@ -218,8 +218,8 @@ mpd_periods: [2, 3, 5, 7, 11]
 
 Override discriminator config:
 ```bash
-python train.py model.discriminator.use_msd=false  # Disable MSD
-python train.py model.discriminator.stft_filters=64  # Increase capacity
+python3 -m train model.discriminator.use_msd=false  # Disable MSD
+python3 -m train model.discriminator.stft_filters=64  # Increase capacity
 ```
 
 ### Adversarial Loss Configuration (`configs/model/adversarial/`)
