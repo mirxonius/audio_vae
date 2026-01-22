@@ -20,6 +20,37 @@ A PyTorch Lightning implementation of an Encodec-style Audio Variational Autoenc
 - **MLflow Integration**: Experiment tracking and model versioning
 - **PyTorch Lightning**: Modular training with callbacks and loggers
 - **Hydra Configuration**: Flexible configuration management
+- **Configurable Discriminators**: Easy-to-configure discriminator architecture via config files
+- **Modular Loss Calculation**: Clean, maintainable adversarial loss calculator
+- **Model Save/Load Utilities**: Simple save/load for AudioVAE models with full hyperparameter preservation
+
+## New Features
+
+### Improved Discriminator Configuration
+
+The discriminator architecture is now fully configurable via Hydra configs. You can easily:
+- Enable/disable specific discriminator components (MSD, MPD, STFT)
+- Adjust FFT sizes, channel dimensions, and other hyperparameters
+- Swap in custom discriminator implementations
+- Configure adversarial loss weights and warmup schedules
+
+See [`docs/DISCRIMINATOR_AND_SAVE_LOAD.md`](docs/DISCRIMINATOR_AND_SAVE_LOAD.md) for detailed documentation.
+
+### Model Save/Load Utilities
+
+New utilities make it trivial to save and load AudioVAE models:
+
+```python
+from src.utils import save_model, load_model
+
+# Save model with all hyperparameters
+save_model(model, "my_model.pt", epoch=10, metadata={"notes": "Best model"})
+
+# Load model - no need to specify architecture!
+loaded_model = load_model("my_model.pt")
+```
+
+See [`examples/model_save_load_example.py`](examples/model_save_load_example.py) for complete examples.
 
 ## Requirements
 
@@ -166,6 +197,42 @@ PyTorch Lightning Trainer settings:
 - `devices`: GPU device IDs
 - `precision`: Training precision (16-mixed, 32, bf16-mixed)
 - `gradient_clip_val`: Gradient clipping threshold
+
+### Discriminator Configuration (`configs/model/discriminator/`)
+
+Configure the adversarial discriminator architecture:
+
+```yaml
+# Enable/disable discriminator components
+use_msd: true   # Multi-scale discriminator
+use_mpd: true   # Multi-period discriminator
+
+# STFT discriminator settings
+stft_filters: 32
+n_ffts: [2048, 1024, 512, 256, 128]
+
+# MSD/MPD settings
+msd_scales: [1, 2, 4]
+mpd_periods: [2, 3, 5, 7, 11]
+```
+
+Override discriminator config:
+```bash
+python train.py model.discriminator.use_msd=false  # Disable MSD
+python train.py model.discriminator.stft_filters=64  # Increase capacity
+```
+
+### Adversarial Loss Configuration (`configs/model/adversarial/`)
+
+Configure adversarial training strategy:
+
+```yaml
+adversarial_weight: 1.0        # Generator adversarial loss weight
+feature_matching_weight: 10.0  # Perceptual loss weight
+warmup_steps: 0                # Steps before enabling discriminator
+```
+
+See [`docs/DISCRIMINATOR_AND_SAVE_LOAD.md`](docs/DISCRIMINATOR_AND_SAVE_LOAD.md) for detailed guide.
 
 ### Callbacks Configuration (`configs/callbacks/`)
 

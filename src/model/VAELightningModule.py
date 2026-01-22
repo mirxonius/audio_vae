@@ -1,10 +1,15 @@
 """
 VAE Lightning Module with optional adversarial training
 Supports warmup period before enabling discriminator
+
+Refactored to use:
+- Configurable discriminator via Hydra
+- AdversarialLossCalculator for cleaner loss computation
+- Improved modularity and maintainability
 """
 
 import os
-from typing import Tuple
+from typing import Tuple, Optional
 import torch
 import pytorch_lightning as pl
 from torch.optim import Optimizer
@@ -13,13 +18,9 @@ import tempfile
 import torchaudio
 
 from src.model.AudioVAE import AudioVAE
-from src.model.discriminators.EncodecDiscriminator import EnCodecDiscriminator
-from src.model.discriminators.losses import (
-    discriminator_loss,
-    generator_adversarial_loss,
-    feature_matching_loss,
-)
 from src.loss_fn.VAELossCalculator import VAELossCalculator
+from src.loss_fn.AdversarialLossCalculator import AdversarialLossCalculator
+from src.utils.model_io import save_model
 
 
 class VAELightningModule(pl.LightningModule):
@@ -36,15 +37,20 @@ class VAELightningModule(pl.LightningModule):
         num_audio_samples: int = 2,
         # Adversarial training parameters
         use_adversarial: bool = False,
-        adversarial_warmup_steps: int = 10000,
-        adversarial_weight: float = 0.1,
-        feature_matching_weight: float = 10.0,
+        discriminator: Optional[torch.nn.Module] = None,
+        adversarial_loss_calculator: Optional[AdversarialLossCalculator] = None,
         discriminator_lr: float = 1e-4,
         discriminator_update_every: int = 1,
         generator_update_every: int = 1,
+        # Legacy parameters (for backward compatibility)
+        adversarial_warmup_steps: Optional[int] = None,
+        adversarial_weight: Optional[float] = None,
+        feature_matching_weight: Optional[float] = None,
     ):
         super().__init__()
-        self.save_hyperparameters(ignore=["architecture", "loss_calculator"])
+        self.save_hyperparameters(
+            ignore=["architecture", "loss_calculator", "discriminator", "adversarial_loss_calculator"]
+        )
 
         # Core components
         self.model = architecture
@@ -52,17 +58,44 @@ class VAELightningModule(pl.LightningModule):
 
         # Adversarial components
         self.use_adversarial = use_adversarial
-        self.adversarial_warmup_steps = adversarial_warmup_steps
-        self.adversarial_weight = adversarial_weight
-        self.feature_matching_weight = feature_matching_weight
         self.discriminator_update_every = discriminator_update_every
         self.generator_update_every = generator_update_every
 
         if self.use_adversarial:
-            self.discriminator = EnCodecDiscriminator()
+            # Discriminator
+            if discriminator is None:
+                raise ValueError(
+                    "When use_adversarial=True, discriminator must be provided. "
+                    "Add discriminator config to your model config."
+                )
+            self.discriminator = discriminator
             self.discriminator_lr = discriminator_lr
+
+            # Adversarial loss calculator
+            if adversarial_loss_calculator is None:
+                # Backward compatibility: create from legacy parameters
+                if adversarial_warmup_steps is not None or adversarial_weight is not None:
+                    import warnings
+                    warnings.warn(
+                        "Using legacy adversarial parameters. "
+                        "Please use adversarial_loss_calculator config instead.",
+                        DeprecationWarning
+                    )
+                    self.adversarial_loss_calculator = AdversarialLossCalculator(
+                        adversarial_weight=adversarial_weight or 1.0,
+                        feature_matching_weight=feature_matching_weight or 10.0,
+                        warmup_steps=adversarial_warmup_steps or 0,
+                    )
+                else:
+                    raise ValueError(
+                        "When use_adversarial=True, adversarial_loss_calculator must be provided. "
+                        "Add adversarial_loss_calculator config to your model config."
+                    )
+            else:
+                self.adversarial_loss_calculator = adversarial_loss_calculator
         else:
             self.discriminator = None
+            self.adversarial_loss_calculator = None
 
         # Optimizer/scheduler configs (partial, will be completed in configure_optimizers)
         self.optimizer_config = optimizer
@@ -81,9 +114,9 @@ class VAELightningModule(pl.LightningModule):
 
     def is_adversarial_active(self) -> bool:
         """Check if adversarial training should be active based on global_step"""
-        if not self.use_adversarial:
+        if not self.use_adversarial or self.adversarial_loss_calculator is None:
             return False
-        return self.global_step >= self.adversarial_warmup_steps
+        return self.adversarial_loss_calculator.is_active(self.global_step)
 
     def forward(
         self, x: torch.Tensor
@@ -127,35 +160,16 @@ class VAELightningModule(pl.LightningModule):
             # VAE reconstruction losses
             vae_losses = self.loss_calculator(recon, x, mean, logvar, self.global_step)
 
-            # Adversarial loss (if warmup complete)
-            if self.is_adversarial_active():
-                # Get discriminator outputs for fake
-                fake_logits, fake_fmaps = self.discriminator(recon)
+            # Adversarial losses (handled by AdversarialLossCalculator)
+            adv_losses = self.adversarial_loss_calculator.compute_generator_loss(
+                discriminator=self.discriminator,
+                real_audio=x,
+                fake_audio=recon,
+                global_step=self.global_step,
+            )
 
-                # Generator adversarial loss
-                g_adv_loss = generator_adversarial_loss(fake_logits)
-
-                # Feature matching loss
-                with torch.no_grad():
-                    real_logits, real_fmaps = self.discriminator(x)
-                fm_loss = feature_matching_loss(fake_fmaps, real_fmaps)
-
-                # Combined generator loss
-                total_g_loss = (
-                    vae_losses["total_loss"]
-                    + self.adversarial_weight * g_adv_loss
-                    + self.feature_matching_weight * fm_loss
-                )
-
-                # Log adversarial losses
-                self.log("train/g_adv_loss", g_adv_loss, prog_bar=True)
-                self.log("train/feature_matching_loss", fm_loss)
-            else:
-                total_g_loss = vae_losses["total_loss"]
-                self.log(
-                    "train/warmup_steps_remaining",
-                    self.adversarial_warmup_steps - self.global_step,
-                )
+            # Combined generator loss
+            total_g_loss = vae_losses["total_loss"] + adv_losses["total_adv_loss"]
 
             # Optimize generator
             opt_g.zero_grad()
@@ -169,6 +183,16 @@ class VAELightningModule(pl.LightningModule):
                 if loss_name != "total_loss":
                     self.log(f"train/{loss_name}", loss_value)
 
+            # Log adversarial losses
+            if adv_losses["is_active"]:
+                self.log("train/g_adv_loss", adv_losses["g_adv_loss"], prog_bar=True)
+                self.log("train/feature_matching_loss", adv_losses["fm_loss"])
+            else:
+                warmup_remaining = (
+                    self.adversarial_loss_calculator.warmup_steps - self.global_step
+                )
+                self.log("train/warmup_steps_remaining", warmup_remaining)
+
         # =================
         # Train Discriminator
         # =================
@@ -180,34 +204,25 @@ class VAELightningModule(pl.LightningModule):
             with torch.no_grad():
                 recon, _, _, _ = self.forward(x)
 
-            # Discriminator outputs
-            real_logits, fmaps = self.discriminator(x)
-            fake_logits, fake_fmaps = self.discriminator(recon.detach())
-
-            # Discriminator loss
-            d_loss = discriminator_loss(real_logits, fake_logits)
+            # Discriminator losses (handled by AdversarialLossCalculator)
+            disc_losses = self.adversarial_loss_calculator.compute_discriminator_loss(
+                discriminator=self.discriminator,
+                real_audio=x,
+                fake_audio=recon,
+            )
 
             # Optimize discriminator
             opt_d.zero_grad()
-            self.manual_backward(d_loss)
+            self.manual_backward(disc_losses["d_loss"])
             torch.nn.utils.clip_grad_norm_(
                 self.discriminator.parameters(), max_norm=1.0
             )
             opt_d.step()
 
-            # Log discriminator loss
-            self.log("train/d_loss", d_loss, prog_bar=True)
-
-            # Log discriminator accuracy
-            with torch.no_grad():
-                real_acc = sum(
-                    (logits > 0).float().mean() for logits in real_logits
-                ) / len(real_logits)
-                fake_acc = sum(
-                    (logits < 0).float().mean() for logits in fake_logits
-                ) / len(fake_logits)
-                self.log("train/d_real_acc", real_acc)
-                self.log("train/d_fake_acc", fake_acc)
+            # Log discriminator metrics
+            self.log("train/d_loss", disc_losses["d_loss"], prog_bar=True)
+            self.log("train/d_real_acc", disc_losses["d_real_acc"])
+            self.log("train/d_fake_acc", disc_losses["d_fake_acc"])
 
         # Step schedulers
         sch_g, sch_d = self.lr_schedulers()
@@ -237,16 +252,23 @@ class VAELightningModule(pl.LightningModule):
         # Adversarial validation metrics (if active)
         if self.is_adversarial_active():
             with torch.no_grad():
-                real_logits, real_fmaps = self.discriminator(x)
-                fake_logits, fake_fmaps = self.discriminator(recon)
+                # Generator adversarial losses
+                adv_losses = self.adversarial_loss_calculator.compute_generator_loss(
+                    discriminator=self.discriminator,
+                    real_audio=x,
+                    fake_audio=recon,
+                    global_step=self.global_step,
+                )
+                self.log("val/g_adv_loss", adv_losses["g_adv_loss"], sync_dist=True)
+                self.log("val/fm_loss", adv_losses["fm_loss"], sync_dist=True)
 
                 # Discriminator loss
-                d_loss = discriminator_loss(real_logits, fake_logits)
-                self.log("val/d_loss", d_loss, sync_dist=True)
-
-                # Generator adversarial loss
-                g_adv_loss = generator_adversarial_loss(fake_logits)
-                self.log("val/g_adv_loss", g_adv_loss, sync_dist=True)
+                disc_losses = self.adversarial_loss_calculator.compute_discriminator_loss(
+                    discriminator=self.discriminator,
+                    real_audio=x,
+                    fake_audio=recon,
+                )
+                self.log("val/d_loss", disc_losses["d_loss"], sync_dist=True)
 
         # Log audio samples periodically
         if self.current_epoch % self.log_audio_every_n_epochs == 0 and batch_idx == 0:
@@ -293,6 +315,42 @@ class VAELightningModule(pl.LightningModule):
                     recon_path,
                     artifact_path=f"audio_samples/epoch_{self.current_epoch}",
                 )
+
+    def on_save_checkpoint(self, checkpoint):
+        """
+        Called when saving a checkpoint.
+        Adds standalone AudioVAE model checkpoint for easy loading.
+        """
+        # Get optimizer and scheduler states if available
+        optimizer_state = None
+        scheduler_state = None
+
+        if hasattr(self, "optimizers"):
+            optimizers = self.optimizers()
+            if optimizers is not None:
+                if isinstance(optimizers, list):
+                    optimizer_state = optimizers[0].state_dict()
+                else:
+                    optimizer_state = optimizers.state_dict()
+
+        if hasattr(self, "lr_schedulers"):
+            schedulers = self.lr_schedulers()
+            if schedulers is not None:
+                if isinstance(schedulers, list):
+                    scheduler_state = schedulers[0].state_dict()
+                else:
+                    scheduler_state = schedulers.state_dict()
+
+        # Store model config for easy reconstruction
+        checkpoint["model_config"] = {
+            "in_channels": self.model.encoder.in_channels,
+            "base_channels": self.model.encoder.base_channels,
+            "channel_mults": self.model.encoder.channel_mults,
+            "strides": self.model.encoder.strides,
+            "latent_dim": self.model.latent_dim,
+            "kernel_size": self.model.encoder.kernel_size,
+            "dilations": self.model.encoder.dilations,
+        }
 
     def configure_optimizers(self):
         """Configure optimizers and schedulers"""
