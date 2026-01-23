@@ -6,7 +6,7 @@ audio_reconstruction:
   musdb_root: ${datamodule.root}
 
   # Audio parameters
-  sample_rate: 44100
+  sample_rate: ${datamodule.sample_rate}
   chunk_duration: 5.0  # Duration in seconds for evaluation chunks
 
   # Logging parameters

@@ -241,14 +241,14 @@ def load_from_lightning_checkpoint(
         if hasattr(arch_config, "__dict__"):
             # It's an object, extract attributes
             config = {
-                k: v
-                for k, v in arch_config.__dict__.items()
-                if not k.startswith("_")
+                k: v for k, v in arch_config.__dict__.items() if not k.startswith("_")
             }
         elif isinstance(arch_config, dict):
             config = arch_config
         else:
-            raise ValueError("Unable to parse architecture config from Lightning checkpoint")
+            raise ValueError(
+                "Unable to parse architecture config from Lightning checkpoint"
+            )
     else:
         # Fallback: try to infer from state dict
         warnings.warn(

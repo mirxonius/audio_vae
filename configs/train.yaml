@@ -1,6 +1,6 @@
 # configs/train.yaml
 experiment_name: audio_vae
-run_name: big_model #audio_vae_30mil
+run_name: audio_vae_with_warmup #audio_vae_30mil
 
 defaults:
   - _self_
@@ -17,7 +17,7 @@ defaults:
 
 # General settings
 seed: 2211 
-sample_rate: 44100
+sample_rate: ${datamodule.sample_rate}
 
 # Control flags
 print_config: true

@@ -20,6 +20,13 @@ class Decoder(nn.Module):
         super().__init__()
         channel_mults = list(reversed(channel_mults))
         strides = list(reversed(strides))
+        self.in_channels = out_channels
+        self.base_channels = base_channels
+        self.channel_mults = channel_mults
+        self.strides = strides
+        self.latent_dim = latent_dim
+        self.kernel_size = kernel_size
+        self.dilations = dilations
 
         self.input_conv = WNConv1d(
             latent_dim, base_channels * channel_mults[0], kernel_size=7, padding=3

@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import musdb
 import random
+import librosa
 from torch.utils.data import Dataset
 
 
@@ -21,7 +22,6 @@ class MUSDB18Dataset(Dataset):
         self.chunk_samples = int(chunk_duration * sample_rate)
         self.channels = channels
         self.num_samples = num_samples
-
         # Define the available stems in MUSDB18
         self.stems = ["vocals", "drums", "bass", "other"]
 
@@ -53,7 +53,10 @@ class MUSDB18Dataset(Dataset):
             target_stem = random.choice(self.stems)
             audio = track.targets[target_stem].audio
 
+        if self.sample_rate != 44100:
+            audio = librosa.resample(y=audio, orig_sr=44100, target_sr=self.sample_rate)
         # Random cropping
+
         max_start = max(0, len(audio) - self.chunk_samples)
         start = np.random.randint(0, max_start + 1) if max_start > 0 else 0
         chunk = audio[start : start + self.chunk_samples]

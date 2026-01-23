@@ -6,8 +6,8 @@ defaults:
   - loss_calculator: loss_calculator.yaml
   - optimizer: optimizer.yaml
   - scheduler: scheduler.yaml
-  - discriminator: discriminator/discriminator.yaml
-  - adversarial_loss_calculator: adversarial/adversarial_loss.yaml
+  - discriminator: discriminator.yaml
+  - adversarial_loss_calculator: adversarial_loss.yaml
 
 scheduler_interval: step
 scheduler_frequency: 1
@@ -21,7 +21,7 @@ num_audio_samples: 2
 use_adversarial: true
 discriminator_lr: 1e-4
 discriminator_update_every: 1
-generator_update_every: 1
+generator_update_every: 2
 
 # Legacy parameters (deprecated - use adversarial_loss_calculator config instead)
 # These are kept for backward compatibility but will show deprecation warning

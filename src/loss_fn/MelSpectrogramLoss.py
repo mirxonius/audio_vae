@@ -35,6 +35,8 @@ class MultiScaleMelSpectrogramLoss(BaseLoss):
                     hop_size=hop,
                     win_length=win,
                     n_mels=mels,
+                    w_log_mag=1.0,
+                    # w_lin_mag=1.0,
                 )
                 for fft, hop, win, mels in zip(
                     fft_sizes, hop_sizes, win_lengths, n_mels

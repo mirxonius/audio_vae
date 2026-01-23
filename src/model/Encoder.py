@@ -18,6 +18,14 @@ class Encoder(nn.Module):
         dilations: List[int] = [1, 3, 9],
     ):
         super().__init__()
+        self.in_channels = in_channels
+        self.base_channels = base_channels
+        self.channel_mults = channel_mults
+        self.strides = strides
+        self.latent_dim = latent_dim
+        self.kernel_size = kernel_size
+        self.dilations = dilations
+
         self.hop_length = math.prod(strides)
         self.input_conv = WNConv1d(in_channels, base_channels, kernel_size=7, padding=3)
 
