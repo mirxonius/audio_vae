@@ -6,4 +6,4 @@ adversarial_weight: 1.0        # Weight for generator adversarial loss
 feature_matching_weight: 10.0  # Weight for feature matching loss
 
 # Training schedule
-warmup_steps: 50000  # Steps before enabling adversarial training (0 = immediate)
+warmup_steps: 0  # Steps before enabling adversarial training (0 = immediate)
