@@ -1,0 +1,12 @@
+# MLflow logger configuration for overfit on batch runs
+mlflow:
+  _target_: pytorch_lightning.loggers.MLFlowLogger
+  experiment_name: audio_vae_overfit
+  tracking_uri: "http://10.100.111.208:30500"
+  save_dir: ${paths.log_dir}/mlflow
+  log_model: false
+  prefix: ""
+  artifact_location: null
+  run_name: null
+  tags:
+    mode: overfit_batch
