@@ -33,7 +33,7 @@ import hydra
 import torch
 import torchaudio
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import Callback
+from pytorch_lightning.callbacks import Callback, RichProgressBar
 from torch.utils.data import DataLoader, Dataset
 from omegaconf import DictConfig, OmegaConf
 from hydra.utils import instantiate
@@ -106,7 +106,9 @@ class BatchSavingCallback(Callback):
                 )
 
                 # Save reconstruction
-                recon_path = os.path.join(epoch_dir, f"sample_{i:02d}_reconstruction.wav")
+                recon_path = os.path.join(
+                    epoch_dir, f"sample_{i:02d}_reconstruction.wav"
+                )
                 torchaudio.save(
                     recon_path,
                     reconstruction[i].float(),
@@ -114,7 +116,9 @@ class BatchSavingCallback(Callback):
                 )
 
             # Log to MLflow if available
-            if hasattr(trainer.logger, "experiment") and hasattr(trainer.logger, "run_id"):
+            if hasattr(trainer.logger, "experiment") and hasattr(
+                trainer.logger, "run_id"
+            ):
                 for filename in os.listdir(epoch_dir):
                     filepath = os.path.join(epoch_dir, filename)
                     trainer.logger.experiment.log_artifact(
@@ -263,13 +267,13 @@ def main(cfg: DictConfig) -> None:
         batch=batch,
         sample_rate=cfg.get("sample_rate", 44100),
     )
-
+    rich_progress_bar = pl
     # Instantiate trainer with logger and callback (no other callbacks)
     log.info("Instantiating trainer")
     trainer = instantiate(
         cfg.trainer,
         logger=loggers if loggers else None,
-        callbacks=[batch_saving_callback],
+        callbacks=[batch_saving_callback, rich_progress_bar],
     )
 
     # Log hyperparameters to all loggers
