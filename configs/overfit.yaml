@@ -11,3 +11,7 @@ seed: 42                    # Fixed seed for reproducible batch selection
 sample_rate: ${datamodule.sample_rate}
 print_config: true
 log_hyperparameters: true   # Log hyperparameters to MLflow
+
+
+override: 
+ -model/optimizer/lr: 1e-2
