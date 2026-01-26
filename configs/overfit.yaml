@@ -1,10 +1,10 @@
 # Overfit on single batch configuration
-# Inherits from main train config but with overfit-specific settings
+# Uses existing model/datamodule configs with overfit-specific trainer
 #
 # Usage examples:
 #   python overfit_on_batch.py
 #   python overfit_on_batch.py model.use_adversarial=false
-#   python overfit_on_batch.py overfit.num_iterations=5000
+#   python overfit_on_batch.py trainer.max_steps=5000
 #   python overfit_on_batch.py model.architecture.latent_dim=64
 #   python overfit_on_batch.py model.optimizer.lr=1e-3
 
@@ -13,24 +13,9 @@ defaults:
   - paths: paths
   - model: audio_vae
   - datamodule: musdb18
-  # No trainer/callbacks/logger needed - we use custom training loop
+  - trainer: overfit        # Uses overfit trainer with overfit_batches=1
 
-# General settings (inherited from train.yaml pattern)
-seed: 2211
+# General settings
+seed: 42                    # Fixed seed for reproducible batch selection
 sample_rate: ${datamodule.sample_rate}
 print_config: true
-
-# Overfit-specific settings
-overfit:
-  # Batch settings
-  batch_size: 4           # Number of samples in the fixed batch
-  seed: 42                # Seed for selecting the fixed batch (separate from model seed)
-
-  # Training settings
-  num_iterations: 1000    # Number of training iterations
-  log_every: 100          # Log metrics every N iterations
-  device: cuda            # Device to train on (cuda/cpu)
-
-  # Checkpoint settings
-  save_checkpoint: false  # Whether to save final checkpoint
-  checkpoint_path: "overfit_checkpoint.pt"
