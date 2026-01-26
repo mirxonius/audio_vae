@@ -267,7 +267,7 @@ def main(cfg: DictConfig) -> None:
         batch=batch,
         sample_rate=cfg.get("sample_rate", 44100),
     )
-    rich_progress_bar = pl
+    rich_progress_bar = RichProgressBar(refresh_rate=1, leave=False)
     # Instantiate trainer with logger and callback (no other callbacks)
     log.info("Instantiating trainer")
     trainer = instantiate(
