@@ -1,11 +1,11 @@
 """
 Overfit on a single batch - debugging script to verify model can learn.
 
-This script uses PyTorch Lightning's built-in `overfit_batches` feature to train
-the model on a single fixed batch. This verifies that the model architecture
-and training loop can successfully minimize the loss.
+This script trains the model on a single fixed batch of data to verify that
+the model architecture and training loop can successfully minimize the loss.
 
-Uses the existing VAELightningModule - no custom training loop needed.
+Uses the existing VAELightningModule with a dummy dataloader that always
+returns the same cached batch.
 
 Usage:
     # Basic usage with defaults
@@ -25,13 +25,80 @@ Usage:
 """
 
 import logging
+from typing import Iterator
 
 import hydra
+import torch
 import pytorch_lightning as pl
+from torch.utils.data import DataLoader, Dataset
 from omegaconf import DictConfig, OmegaConf
 from hydra.utils import instantiate
 
 log = logging.getLogger(__name__)
+
+
+class SingleBatchDataset(Dataset):
+    """Dataset that always returns the same cached batch."""
+
+    def __init__(self, batch: torch.Tensor):
+        """
+        Args:
+            batch: Tensor of shape (batch_size, channels, samples)
+        """
+        self.batch = batch
+
+    def __len__(self) -> int:
+        return len(self.batch)
+
+    def __getitem__(self, idx: int) -> torch.Tensor:
+        return self.batch[idx]
+
+
+class SingleBatchDataModule(pl.LightningDataModule):
+    """DataModule that wraps a single batch for overfitting."""
+
+    def __init__(self, batch: torch.Tensor, batch_size: int):
+        super().__init__()
+        self.batch = batch
+        self.batch_size = batch_size
+
+    def train_dataloader(self) -> DataLoader:
+        dataset = SingleBatchDataset(self.batch)
+        return DataLoader(
+            dataset,
+            batch_size=self.batch_size,
+            shuffle=False,  # Keep order consistent
+            num_workers=0,
+            drop_last=False,
+        )
+
+    def val_dataloader(self) -> DataLoader:
+        # Return same batch for validation
+        return self.train_dataloader()
+
+
+def get_fixed_batch(cfg: DictConfig) -> torch.Tensor:
+    """
+    Get a single fixed batch from the original datamodule.
+
+    Args:
+        cfg: Hydra configuration
+
+    Returns:
+        Fixed batch tensor of shape (batch_size, channels, samples)
+    """
+    # Instantiate the original datamodule
+    datamodule = instantiate(cfg.datamodule)
+    datamodule.setup("fit")
+
+    # Get one batch
+    dataloader = datamodule.train_dataloader()
+    batch = next(iter(dataloader))
+
+    log.info(f"Cached batch shape: {batch.shape}")
+    log.info(f"Batch stats - min: {batch.min():.4f}, max: {batch.max():.4f}, mean: {batch.mean():.4f}")
+
+    return batch
 
 
 @hydra.main(version_base="1.3", config_path="configs", config_name="overfit")
@@ -49,9 +116,15 @@ def main(cfg: DictConfig) -> None:
     # Set seed for reproducibility (ensures same batch every time)
     pl.seed_everything(cfg.seed, workers=True)
 
-    # Instantiate datamodule
-    log.info(f"Instantiating datamodule <{cfg.datamodule._target_}>")
-    datamodule = instantiate(cfg.datamodule)
+    # Get and cache a single batch from the original datamodule
+    log.info("Fetching and caching single batch...")
+    batch = get_fixed_batch(cfg)
+
+    # Create dummy datamodule with the cached batch
+    datamodule = SingleBatchDataModule(
+        batch=batch,
+        batch_size=len(batch),
+    )
 
     # Instantiate model (uses existing VAELightningModule)
     log.info(f"Instantiating model <{cfg.model._target_}>")
@@ -66,8 +139,8 @@ def main(cfg: DictConfig) -> None:
         disc_params = sum(p.numel() for p in model.discriminator.parameters())
         log.info(f"Discriminator parameters: {disc_params:,}")
 
-    # Instantiate trainer with overfit_batches
-    log.info("Instantiating trainer with overfit_batches=1")
+    # Instantiate trainer
+    log.info("Instantiating trainer")
     trainer = instantiate(cfg.trainer)
 
     # Run training
