@@ -25,16 +25,106 @@ Usage:
 """
 
 import logging
+import os
+import tempfile
 from typing import Iterator, List
 
 import hydra
 import torch
+import torchaudio
 import pytorch_lightning as pl
+from pytorch_lightning.callbacks import Callback
 from torch.utils.data import DataLoader, Dataset
 from omegaconf import DictConfig, OmegaConf
 from hydra.utils import instantiate
 
 log = logging.getLogger(__name__)
+
+
+class BatchSavingCallback(Callback):
+    """
+    Callback that saves original and reconstructed batches after every epoch.
+    Useful for debugging and visualizing overfitting progress.
+    """
+
+    def __init__(
+        self,
+        batch: torch.Tensor,
+        sample_rate: int = 44100,
+        output_dir: str = None,
+    ):
+        """
+        Args:
+            batch: The original batch tensor to reconstruct (batch_size, channels, samples)
+            sample_rate: Audio sample rate for saving wav files
+            output_dir: Directory to save audio files. If None, uses temp directory
+                       and logs to MLflow if available.
+        """
+        super().__init__()
+        self.batch = batch
+        self.sample_rate = sample_rate
+        self.output_dir = output_dir
+        self._temp_dir = None
+
+    def on_fit_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
+        """Create output directory if needed."""
+        if self.output_dir is None:
+            self._temp_dir = tempfile.mkdtemp(prefix="batch_reconstructions_")
+            self.output_dir = self._temp_dir
+            log.info(f"Saving batch reconstructions to: {self.output_dir}")
+        else:
+            os.makedirs(self.output_dir, exist_ok=True)
+
+    def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
+        """Save original and reconstructed batch after each epoch."""
+        # Only save on rank 0 in distributed training
+        if trainer.global_rank != 0:
+            return
+
+        epoch = trainer.current_epoch
+        epoch_dir = os.path.join(self.output_dir, f"epoch_{epoch:04d}")
+        os.makedirs(epoch_dir, exist_ok=True)
+
+        pl_module.eval()
+        with torch.no_grad():
+            # Move batch to device and reconstruct
+            batch_device = self.batch.to(pl_module.device)
+            reconstruction, _, _, _ = pl_module(batch_device)
+
+            # Move back to CPU for saving
+            original = self.batch.cpu()
+            reconstruction = reconstruction.cpu()
+
+            # Save each sample in the batch
+            for i in range(len(original)):
+                # Save original
+                original_path = os.path.join(epoch_dir, f"sample_{i:02d}_original.wav")
+                torchaudio.save(
+                    original_path,
+                    original[i].float(),
+                    self.sample_rate,
+                )
+
+                # Save reconstruction
+                recon_path = os.path.join(epoch_dir, f"sample_{i:02d}_reconstruction.wav")
+                torchaudio.save(
+                    recon_path,
+                    reconstruction[i].float(),
+                    self.sample_rate,
+                )
+
+            # Log to MLflow if available
+            if hasattr(trainer.logger, "experiment") and hasattr(trainer.logger, "run_id"):
+                for filename in os.listdir(epoch_dir):
+                    filepath = os.path.join(epoch_dir, filename)
+                    trainer.logger.experiment.log_artifact(
+                        trainer.logger.run_id,
+                        filepath,
+                        artifact_path=f"batch_reconstructions/epoch_{epoch:04d}",
+                    )
+
+        pl_module.train()
+        log.info(f"Saved batch reconstructions for epoch {epoch} to {epoch_dir}")
 
 
 def instantiate_loggers(cfg: DictConfig) -> List:
@@ -168,9 +258,19 @@ def main(cfg: DictConfig) -> None:
     # Instantiate logger(s)
     loggers = instantiate_loggers(cfg)
 
-    # Instantiate trainer with logger
+    # Create batch saving callback
+    batch_saving_callback = BatchSavingCallback(
+        batch=batch,
+        sample_rate=cfg.get("sample_rate", 44100),
+    )
+
+    # Instantiate trainer with logger and callback (no other callbacks)
     log.info("Instantiating trainer")
-    trainer = instantiate(cfg.trainer, logger=loggers if loggers else None)
+    trainer = instantiate(
+        cfg.trainer,
+        logger=loggers if loggers else None,
+        callbacks=[batch_saving_callback],
+    )
 
     # Log hyperparameters to all loggers
     if cfg.get("log_hyperparameters") and trainer.logger:
