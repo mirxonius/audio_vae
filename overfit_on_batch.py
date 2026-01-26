@@ -25,7 +25,7 @@ Usage:
 """
 
 import logging
-from typing import Iterator
+from typing import Iterator, List
 
 import hydra
 import torch
@@ -35,6 +35,25 @@ from omegaconf import DictConfig, OmegaConf
 from hydra.utils import instantiate
 
 log = logging.getLogger(__name__)
+
+
+def instantiate_loggers(cfg: DictConfig) -> List:
+    """
+    Instantiate loggers from config.
+
+    Args:
+        cfg: Hydra configuration containing logger config
+
+    Returns:
+        List of instantiated loggers
+    """
+    loggers = []
+    if cfg.get("logger"):
+        for lg_name, lg_conf in cfg.logger.items():
+            if lg_conf is not None and lg_conf.get("_target_"):
+                log.info(f"Instantiating logger <{lg_conf._target_}>")
+                loggers.append(instantiate(lg_conf))
+    return loggers
 
 
 class SingleBatchDataset(Dataset):
@@ -146,9 +165,25 @@ def main(cfg: DictConfig) -> None:
         disc_params = sum(p.numel() for p in model.discriminator.parameters())
         log.info(f"Discriminator parameters: {disc_params:,}")
 
-    # Instantiate trainer
+    # Instantiate logger(s)
+    loggers = instantiate_loggers(cfg)
+
+    # Instantiate trainer with logger
     log.info("Instantiating trainer")
-    trainer = instantiate(cfg.trainer)
+    trainer = instantiate(cfg.trainer, logger=loggers if loggers else None)
+
+    # Log hyperparameters to all loggers
+    if cfg.get("log_hyperparameters") and trainer.logger:
+        log.info("Logging hyperparameters to MLflow")
+        hparams = OmegaConf.to_container(cfg, resolve=True, throw_on_missing=False)
+        # Add batch info to hyperparameters
+        hparams["batch_shape"] = list(batch.shape)
+        hparams["batch_stats"] = {
+            "min": float(batch.min()),
+            "max": float(batch.max()),
+            "mean": float(batch.mean()),
+        }
+        trainer.logger.log_hyperparams(hparams)
 
     # Run training
     log.info("Starting overfitting on single batch...")
@@ -159,6 +194,20 @@ def main(cfg: DictConfig) -> None:
     print("OVERFITTING COMPLETE")
     print("=" * 50)
     print(f"Final step: {trainer.global_step}")
+
+    # Log final metrics summary
+    if trainer.callback_metrics:
+        print("\nFinal metrics:")
+        for name, value in trainer.callback_metrics.items():
+            print(f"  {name}: {value:.6f}")
+
+    # Print MLflow run info
+    if trainer.logger:
+        for lg in trainer.loggers:
+            if hasattr(lg, "run_id"):
+                print(f"\nMLflow run ID: {lg.run_id}")
+                print(f"MLflow experiment: {lg.experiment_id}")
+
     print("=" * 50)
 
 
