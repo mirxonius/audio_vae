@@ -1,0 +1,25 @@
+# Trainer configuration for overfitting on a single batch
+
+_target_: pytorch_lightning.Trainer
+
+# Training iterations
+max_steps: 1000
+
+# Hardware
+accelerator: gpu
+devices: 1
+precision: 16-mixed
+
+# Disable validation (not needed for overfitting)
+num_sanity_val_steps: 0
+limit_val_batches: 0
+enable_checkpointing: false
+
+# Logging settings
+log_every_n_steps: 10
+enable_progress_bar: true
+enable_model_summary: true
+
+# Reproducibility
+deterministic: true
+benchmark: false
