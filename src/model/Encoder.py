@@ -2,7 +2,7 @@ from typing import List, Tuple
 import torch
 import torch.nn as nn
 import math
-from src.model.layers import Snake, WNConv1d, ResidualUnit
+from src.model.layers import Snake, WNConv1d
 from src.model.blocks import EncoderBlock
 
 

@@ -1,13 +1,3 @@
-# Overfit on single batch configuration
-# Uses existing model/datamodule configs with overfit-specific trainer
-#
-# Usage examples:
-#   python overfit_on_batch.py
-#   python overfit_on_batch.py model.use_adversarial=false
-#   python overfit_on_batch.py trainer.max_steps=5000
-#   python overfit_on_batch.py model.architecture.latent_dim=64
-#   python overfit_on_batch.py model.optimizer.lr=1e-3
-
 defaults:
   - _self_
   - paths: paths

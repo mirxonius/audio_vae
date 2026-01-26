@@ -21,5 +21,4 @@ enable_progress_bar: true
 enable_model_summary: true
 
 # Reproducibility
-deterministic: true
 benchmark: false

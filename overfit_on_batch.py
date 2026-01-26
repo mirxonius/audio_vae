@@ -40,30 +40,34 @@ log = logging.getLogger(__name__)
 class SingleBatchDataset(Dataset):
     """Dataset that always returns the same cached batch."""
 
-    def __init__(self, batch: torch.Tensor):
+    def __init__(self, batch: torch.Tensor, num_samples: int):
         """
         Args:
             batch: Tensor of shape (batch_size, channels, samples)
         """
         self.batch = batch
+        self.num_samples = num_samples
+        self.batch_size = len(batch)
 
     def __len__(self) -> int:
-        return len(self.batch)
+        return self.num_samples
 
     def __getitem__(self, idx: int) -> torch.Tensor:
+        idx = idx % self.batch_size
         return self.batch[idx]
 
 
 class SingleBatchDataModule(pl.LightningDataModule):
     """DataModule that wraps a single batch for overfitting."""
 
-    def __init__(self, batch: torch.Tensor, batch_size: int):
+    def __init__(self, batch: torch.Tensor, batch_size: int, num_samples: int):
         super().__init__()
         self.batch = batch
         self.batch_size = batch_size
+        self.num_samples = num_samples
 
     def train_dataloader(self) -> DataLoader:
-        dataset = SingleBatchDataset(self.batch)
+        dataset = SingleBatchDataset(self.batch, num_samples=self.num_samples)
         return DataLoader(
             dataset,
             batch_size=self.batch_size,
@@ -96,7 +100,9 @@ def get_fixed_batch(cfg: DictConfig) -> torch.Tensor:
     batch = next(iter(dataloader))
 
     log.info(f"Cached batch shape: {batch.shape}")
-    log.info(f"Batch stats - min: {batch.min():.4f}, max: {batch.max():.4f}, mean: {batch.mean():.4f}")
+    log.info(
+        f"Batch stats - min: {batch.min():.4f}, max: {batch.max():.4f}, mean: {batch.mean():.4f}"
+    )
 
     return batch
 
@@ -122,8 +128,7 @@ def main(cfg: DictConfig) -> None:
 
     # Create dummy datamodule with the cached batch
     datamodule = SingleBatchDataModule(
-        batch=batch,
-        batch_size=len(batch),
+        batch=batch, batch_size=len(batch), num_samples=8000
     )
 
     # Instantiate model (uses existing VAELightningModule)
@@ -133,7 +138,9 @@ def main(cfg: DictConfig) -> None:
     # Log model info
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    log.info(f"Model parameters: {total_params:,} total, {trainable_params:,} trainable")
+    log.info(
+        f"Model parameters: {total_params:,} total, {trainable_params:,} trainable"
+    )
 
     if model.use_adversarial:
         disc_params = sum(p.numel() for p in model.discriminator.parameters())
