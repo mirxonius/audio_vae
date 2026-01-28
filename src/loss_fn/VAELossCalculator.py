@@ -7,7 +7,12 @@ from auraloss.perceptual import FIRFilter
 
 
 from src.loss_fn.BaseLoss import BaseLoss
-from src.loss_fn.MultiResolutionSTFTLoss import MultiResolutionSTFTLoss
+from src.loss_fn.MultiResolutionSTFTLoss import (
+    MultiResolutionSTFTLoss,
+    SumAndDifferenceSTFTLoss,
+    LogSpectralDistanceLoss,
+    SISDRLoss,
+)
 from src.loss_fn.MelSpectrogramLoss import MultiScaleMelSpectrogramLoss
 from src.loss_fn.WaveformLoss import WaveformLoss
 
@@ -41,8 +46,10 @@ class VAELossCalculator(nn.Module):
         free_bits: float = 0.0,
         # Individual reconstruction losses (all optional)
         stft_loss: Optional[MultiResolutionSTFTLoss] = None,
+        sum_and_diff_loss: Optional[SumAndDifferenceSTFTLoss] = None,
         mel_loss: Optional[MultiScaleMelSpectrogramLoss] = None,
         waveform_loss: Optional[WaveformLoss] = None,
+        si_sdr_loss: Optional[SISDRLoss] = None,
         # Extensibility: additional custom losses
         additional_losses: Optional[Dict[str, BaseLoss]] = None,
         perceptual_weighting: bool = False,
@@ -62,7 +69,10 @@ class VAELossCalculator(nn.Module):
             self.reconstruction_losses["mel_loss"] = mel_loss
         if waveform_loss is not None:
             self.reconstruction_losses["waveform_loss"] = waveform_loss
-
+        if sum_and_diff_loss is not None:
+            self.reconstruction_losses["sum_and_diff_stft"] = sum_and_diff_loss
+        if si_sdr_loss:
+            self.reconstruction_losses["si_sdr_loss"] = si_sdr_loss
         # Add any additional custom losses
         if additional_losses is not None:
             for name, loss in additional_losses.items():
@@ -131,11 +141,9 @@ class VAELossCalculator(nn.Module):
 
         for name, loss_fn in self.reconstruction_losses.items():
             loss_value = loss_fn(x_recon, x_target)
-            weighted_loss = loss_value * loss_fn.weight
-            total_recon_loss = total_recon_loss + weighted_loss
+            total_recon_loss = total_recon_loss + loss_value
 
             loss_breakdown[name] = loss_value
-            loss_breakdown[f"{name}_weighted"] = weighted_loss
 
         # Compute KL loss
         kl_loss = self.kl_divergence(mu, log_var)

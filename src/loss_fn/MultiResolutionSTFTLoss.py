@@ -6,7 +6,6 @@ import numpy as np
 from typing import List, Any
 import scipy.signal
 from auraloss.perceptual import FIRFilter
-from src.loss_fn.BaseLoss import BaseLoss
 
 
 def normalized_complex_distance_loss(x, y, eps=1e-7):
@@ -89,13 +88,8 @@ class SpectralConvergenceLoss(torch.nn.Module):
         super(SpectralConvergenceLoss, self).__init__()
 
     def forward(self, x_mag, y_mag):
-        return (
-            (
-                torch.norm(y_mag - x_mag, p="fro", dim=[-1, -2])
-                / (torch.norm(y_mag, p="fro", dim=[-1, -2]) + 1e-5)
-            )
-            .unsqueeze(-1)
-            .unsqueeze(-1)
+        return torch.norm(y_mag - x_mag, p="fro", dim=[-1, -2]) / (
+            torch.norm(y_mag, p="fro", dim=[-1, -2]) + 1e-5
         )
 
 
@@ -373,7 +367,7 @@ class STFTLoss(torch.nn.Module):
             return loss, sc_mag_loss, log_mag_loss, lin_mag_loss, phs_loss
 
 
-class MultiResolutionSTFTLoss(BaseLoss):
+class MultiResolutionSTFTLoss(torch.nn.Module):
     """Multi resolution STFT loss module.
 
     See [Yamamoto et al., 2019](https://arxiv.org/abs/1910.11480)
@@ -412,11 +406,9 @@ class MultiResolutionSTFTLoss(BaseLoss):
         n_bins: List[int] = None,
         perceptual_weighting: bool = False,
         scale_invariance: bool = False,
-        weight: float = 1.0,
-        name: str = None,
         **kwargs,
     ):
-        super().__init__(weight=weight, name=name)
+        super().__init__()
         assert len(fft_sizes) == len(hop_sizes) == len(win_lengths)  # must define all
         self.fft_sizes = fft_sizes
         self.hop_sizes = hop_sizes
@@ -466,7 +458,7 @@ class MultiResolutionSTFTLoss(BaseLoss):
             return mrstft_loss, sc_mag_loss, log_mag_loss, lin_mag_loss, phs_loss
 
 
-class SumAndDifferenceSTFTLoss(BaseLoss):
+class SumAndDifferenceSTFTLoss(torch.nn.Module):
     """Sum and difference sttereo STFT loss module.
 
     See [Steinmetz et al., 2020](https://arxiv.org/abs/2010.10291)
@@ -497,15 +489,13 @@ class SumAndDifferenceSTFTLoss(BaseLoss):
         w_sum: float = 1.0,
         w_diff: float = 1.0,
         output: str = "loss",
-        weight: float = 1.0,
         w_log_mag: float = 1.0,
         w_lin_mag: float = 0.0,
         sample_rate: int = None,
         perceptual_weighting: bool = False,
-        name: str = None,
         **kwargs,
     ):
-        super().__init__(weight=weight, name=name)
+        super().__init__()
         self.sum_and_diff = SumAndDifference()
         self.w_sum = w_sum
         self.w_diff = w_diff
@@ -638,7 +628,7 @@ class SDSDRLoss(torch.nn.Module):
         return -losses
 
 
-class MultiScaleMelLoss(BaseLoss):
+class MultiScaleMelLoss(torch.nn.Module):
     """Multi-resolution Mel Spectrogram Loss module.
 
     This loss uses multiple STFT configurations, each calculating Mel-scaled spectrograms.
@@ -678,11 +668,9 @@ class MultiScaleMelLoss(BaseLoss):
         sample_rate: float = None,  # Make this required for Mel
         perceptual_weighting: bool = False,
         scale_invariance: bool = False,
-        weight: float = 1.0,
-        name: str = None,
         **kwargs,
     ):
-        super().__init__(weight=weight, name=name)
+        super().__init__()
         assert (
             len(fft_sizes) == len(hop_sizes) == len(win_lengths) == len(n_mels)
         ), "fft_sizes, hop_sizes, win_lengths, and n_mels must have the same length"
@@ -722,7 +710,7 @@ class MultiScaleMelLoss(BaseLoss):
         return total_mel_loss / len(self.mel_stft_losses)
 
 
-class LogSpectralDistanceLoss(BaseLoss):
+class LogSpectralDistanceLoss(torch.nn.Module):
     """Log-Spectral Distance (LSD) Loss module.
 
     Measures the Euclidean distance between the log-magnitude spectra
@@ -750,10 +738,8 @@ class LogSpectralDistanceLoss(BaseLoss):
         window: str = "hann_window",
         eps: float = 1e-8,
         reduction: str = "mean",
-        weight: float = 1.0,
-        name: str = None,
     ):
-        super().__init__(weight=weight, name=name)
+        super().__init__()
         self.fft_size = fft_size
         self.hop_size = hop_size
         self.win_length = win_length

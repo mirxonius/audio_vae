@@ -3,7 +3,7 @@ _target_: src.model.VAELightningModule.VAELightningModule
 
 defaults:
   - architecture: architecture.yaml
-  - loss_calculator: loss_calculator.yaml
+  - loss_calculator: vae_loss_stft_mel.yaml
   - optimizer: optimizer.yaml
   - scheduler: scheduler.yaml
   - discriminator: discriminator.yaml

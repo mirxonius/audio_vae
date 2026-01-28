@@ -1,0 +1,33 @@
+_target_: src.loss_fn.VAELossCalculator.VAELossCalculator
+
+# --- VAE regularization ---
+kl_weight: 1.0e-4
+kl_warmup_steps: 5000
+free_bits: 0.0
+
+# --- Spectral loss (core) ---
+stft_loss:
+  _target_: src.loss_fn.MultiResolutionSTFTLoss.SumAndDifferenceSTFTLoss
+  fft_sizes: [2048, 1024, 512, 256, 128, 64, 32]
+  hop_sizes: [512, 256, 128, 64, 32, 16, 8]
+  win_lengths: [2048, 1024, 512, 256, 128, 64, 32]
+  w_sc: 0.0
+  w_log_mag: 1.0
+  w_lin_mag: 1.0
+  perceptual_weighting: true
+  sample_rate: ${datamodule.sample_rate}
+
+# --- Perceptual mel loss ---
+mel_loss:
+  _target_: src.loss_fn.MelSpectrogramLoss.MultiScaleMelSpectrogramLoss
+  weight: 1.0
+  name: mel_loss
+  sample_rate: ${datamodule.sample_rate}
+  fft_sizes: [2048, 1024, 512]
+  hop_sizes: [512, 256, 128]
+  win_lengths: [2048, 1024, 512]
+  n_mels: [128, 64, 32]
+
+# --- No time-domain loss ---
+waveform_loss: null
+si_sdr_loss: null

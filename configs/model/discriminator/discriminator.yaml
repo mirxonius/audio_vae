@@ -7,7 +7,7 @@ in_channels: 2  # Stereo audio
 n_ffts: [2048, 1024, 512, 256, 128]  # Multi-scale FFT sizes
 
 # Multi-Scale Discriminator (MSD) parameters
-use_msd: true
+use_msd: false
 msd_scales: [1, 2, 4]  # Waveform downsampling scales
 
 # Multi-Period Discriminator (MPD) parameters
