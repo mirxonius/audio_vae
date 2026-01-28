@@ -39,7 +39,7 @@ class VAELightningModule(pl.LightningModule):
         use_adversarial: bool = False,
         discriminator: Optional[torch.nn.Module] = None,
         adversarial_loss_calculator: Optional[AdversarialLossCalculator] = None,
-        discriminator_lr: float = 1e-4,
+        discriminator_lr: float = 3e-4,
         discriminator_update_every: int = 1,
         generator_update_every: int = 1,
         # Legacy parameters (for backward compatibility)

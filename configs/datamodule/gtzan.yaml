@@ -4,8 +4,8 @@ _target_: src.dataset.GTZANDatamodule.GTZANDataModule
 root: "/data1/midi_generation_datasets/gtzan"
 sample_rate: 22050
 chunk_duration: 1.5  # seconds
-channels: 1
-batch_size: 8
+channels: 2
+batch_size: 20
 train_samples: 8000
 val_samples: 800
 num_workers: 4

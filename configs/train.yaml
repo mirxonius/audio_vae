@@ -6,7 +6,7 @@ defaults:
   - _self_
   - paths: paths
   - model: audio_vae
-  - datamodule: musdb18
+  - datamodule: gtzan #musdb18
   - trainer: default
   - callbacks: callbacks
   - logger: mlflow
