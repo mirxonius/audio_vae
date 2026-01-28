@@ -1,21 +1,17 @@
 # src/loss_fn/VAELossCalculator.py
+"""VAE loss calculator combining KL divergence with reconstruction losses."""
+
 import torch
 import torch.nn as nn
 from typing import Dict, Optional
 from dataclasses import dataclass
-from auraloss.perceptual import FIRFilter
-
 
 from src.loss_fn.BaseLoss import BaseLoss
-from src.loss_fn.MultiResolutionSTFTLoss import MultiResolutionSTFTLoss
-from src.loss_fn.MelSpectrogramLoss import MultiScaleMelSpectrogramLoss
-from src.loss_fn.WaveformLoss import WaveformLoss
 
 
 @dataclass
 class VAELossOutput:
     """Container for VAE loss outputs."""
-
     total_loss: torch.Tensor
     reconstruction_loss: torch.Tensor
     kl_loss: torch.Tensor
@@ -25,27 +21,39 @@ class VAELossOutput:
 
 class VAELossCalculator(nn.Module):
     """
-    VAE loss calculator with explicit, optional reconstruction losses.
+    VAE loss calculator with flexible reconstruction loss configuration.
 
-    Each loss is a separate argument, making it easy to:
-    - Enable/disable losses via config (set to null)
-    - Override individual loss params
-    - See exactly what losses are active
+    Combines KL divergence loss with multiple reconstruction losses.
+    Supports KL warmup scheduling and free bits for posterior collapse prevention.
+
+    Args:
+        kl_weight: Base KL divergence weight (default: 1e-4)
+        kl_warmup_steps: Steps for linear KL warmup (default: 0, no warmup)
+        free_bits: Minimum KL per dimension to prevent collapse (default: 0.0)
+        stft_loss: Optional STFT-based reconstruction loss
+        mel_loss: Optional mel spectrogram reconstruction loss
+        waveform_loss: Optional waveform-domain reconstruction loss
+        additional_losses: Dict of additional custom losses
+
+    Example:
+        >>> from src.loss_fn import VAELossCalculator, WaveformLoss, SumAndDifferenceSTFTLoss
+        >>> calculator = VAELossCalculator(
+        ...     kl_weight=1e-4,
+        ...     kl_warmup_steps=5000,
+        ...     stft_loss=SumAndDifferenceSTFTLoss(...),
+        ...     waveform_loss=WaveformLoss(weight=1.0),
+        ... )
     """
 
     def __init__(
         self,
-        # KL configuration
         kl_weight: float = 1e-4,
         kl_warmup_steps: int = 0,
         free_bits: float = 0.0,
-        # Individual reconstruction losses (all optional)
-        stft_loss: Optional[MultiResolutionSTFTLoss] = None,
-        mel_loss: Optional[MultiScaleMelSpectrogramLoss] = None,
-        waveform_loss: Optional[WaveformLoss] = None,
-        # Extensibility: additional custom losses
+        stft_loss: Optional[BaseLoss] = None,
+        mel_loss: Optional[BaseLoss] = None,
+        waveform_loss: Optional[BaseLoss] = None,
         additional_losses: Optional[Dict[str, BaseLoss]] = None,
-        perceptual_weighting: bool = False,
     ):
         super().__init__()
 
@@ -53,7 +61,7 @@ class VAELossCalculator(nn.Module):
         self.kl_warmup_steps = kl_warmup_steps
         self.free_bits = free_bits
 
-        # Collect all non-None losses into ModuleDict for proper registration
+        # Collect all non-None losses into ModuleDict
         self.reconstruction_losses = nn.ModuleDict()
 
         if stft_loss is not None:
@@ -73,9 +81,6 @@ class VAELossCalculator(nn.Module):
 
         # Track training step for KL warmup
         self.register_buffer("global_step", torch.tensor(0, dtype=torch.long))
-        self.preceptual_weighting = perceptual_weighting
-        if self.preceptual_weighting:
-            pass
 
     def get_kl_weight(self) -> float:
         """Get current KL weight with linear warmup."""
@@ -91,9 +96,16 @@ class VAELossCalculator(nn.Module):
         log_var: torch.Tensor,
     ) -> torch.Tensor:
         """
-        KL divergence: KL(q(z|x) || p(z)) where p(z) = N(0, I).
+        Compute KL divergence: KL(q(z|x) || p(z)) where p(z) = N(0, I).
 
         With optional free bits to prevent posterior collapse.
+
+        Args:
+            mu: Latent mean [B, ...]
+            log_var: Latent log variance [B, ...]
+
+        Returns:
+            Scalar KL divergence (sum over dims, mean over batch)
         """
         kl_per_dim = -0.5 * (1 + log_var - mu.pow(2) - log_var.exp())
 
@@ -110,7 +122,7 @@ class VAELossCalculator(nn.Module):
         mu: torch.Tensor,
         log_var: torch.Tensor,
         step: Optional[int] = None,
-    ) -> dict[str, torch.Tensor]:
+    ) -> Dict[str, torch.Tensor]:
         """
         Compute total VAE loss.
 
@@ -120,6 +132,9 @@ class VAELossCalculator(nn.Module):
             mu: Latent mean [B, latent_dim, T']
             log_var: Latent log variance [B, latent_dim, T']
             step: Optional global step for KL warmup
+
+        Returns:
+            Dict with keys: total_loss, reconstruction_loss, kl_loss, kl_weight
         """
         if step is not None:
             self.global_step.fill_(step)
