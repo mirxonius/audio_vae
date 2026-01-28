@@ -1,0 +1,11 @@
+# GTZAN Music Genre Classification dataset configuration
+_target_: src.dataset.GTZANDatamodule.GTZANDataModule
+
+root: "/data1/midi_generation_datasets/gtzan"
+sample_rate: 22050
+chunk_duration: 1.5  # seconds
+channels: 1
+batch_size: 8
+train_samples: 8000
+val_samples: 800
+num_workers: 4
