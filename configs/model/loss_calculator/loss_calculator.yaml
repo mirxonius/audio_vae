@@ -3,31 +3,59 @@ kl_weight: 1.0e-4
 kl_warmup_steps: 5000
 free_bits: 0.0
 
+# Audio configuration
+num_channels: ${datamodule.num_channels}
+
+# Standard reconstruction losses
 stft_loss:
   _target_: src.loss_fn.MultiResolutionSTFTLoss.SumAndDifferenceSTFTLoss
   weight: 1.0
-  name: sd_mr_stft_loss
   fft_sizes: [2048, 1024, 512, 256, 128, 64, 32]
   hop_sizes: [512, 256, 128, 64, 32, 16, 8]
   win_lengths: [2048, 1024, 512, 256, 128, 64, 32]
   w_sc: 1.0
-  w_log_mag:  1.0
-  w_lin_mag:  0.0
+  w_log_mag: 1.0
+  w_lin_mag: 0.0
   perceptual_weighting: true
   sample_rate: ${datamodule.sample_rate}
 
-#mel_loss: 
+#mel_loss:
 #  _target_: src.loss_fn.MelSpectrogramLoss.MultiScaleMelSpectrogramLoss
 #  weight: 1.0
-#  name: mel_loss
 #  sample_rate: ${datamodule.sample_rate}
 #  fft_sizes: [2048, 1024, 512]
-#  hop_sizes: [512, 256, 128]  
+#  hop_sizes: [512, 256, 128]
 #  win_lengths: [2048, 1024, 512]
 #  n_mels: [128, 64, 32]
-
 
 waveform_loss:
   _target_: src.loss_fn.WaveformLoss.WaveformLoss
   weight: 1.0
-  name: waveform_loss
+
+# Stereo-specific losses (only used when num_channels=2)
+# Set use_sum_and_difference: true to enable mid/side decomposition loss
+use_sum_and_difference: false
+#sum_and_difference_loss:
+#  _target_: src.loss_fn.MultiResolutionSTFTLoss.SumAndDifferenceSTFTLoss
+#  weight: 1.0
+#  fft_sizes: [2048, 1024, 512, 256]
+#  hop_sizes: [512, 256, 128, 64]
+#  win_lengths: [2048, 1024, 512, 256]
+#  sample_rate: ${datamodule.sample_rate}
+
+# Set use_lr_multiresolution: true to enable separate L/R channel STFT loss
+use_lr_multiresolution: false
+#lr_multiresolution_loss:
+#  _target_: src.loss_fn.MultiResolutionSTFTLoss.MultiResolutionSTFTLoss
+#  weight: 1.0
+#  fft_sizes: [2048, 1024, 512, 256]
+#  hop_sizes: [512, 256, 128, 64]
+#  win_lengths: [2048, 1024, 512, 256]
+#  sample_rate: ${datamodule.sample_rate}
+
+# Optional: Override loss weights here instead of in individual loss configs
+#loss_weights:
+#  stft_loss: 1.0
+#  waveform_loss: 1.0
+#  sum_diff_loss: 1.0
+#  lr_stft_loss: 1.0
