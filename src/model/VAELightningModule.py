@@ -49,7 +49,12 @@ class VAELightningModule(pl.LightningModule):
     ):
         super().__init__()
         self.save_hyperparameters(
-            ignore=["architecture", "loss_calculator", "discriminator", "adversarial_loss_calculator"]
+            ignore=[
+                "architecture",
+                "loss_calculator",
+                "discriminator",
+                "adversarial_loss_calculator",
+            ]
         )
 
         # Core components
@@ -74,12 +79,16 @@ class VAELightningModule(pl.LightningModule):
             # Adversarial loss calculator
             if adversarial_loss_calculator is None:
                 # Backward compatibility: create from legacy parameters
-                if adversarial_warmup_steps is not None or adversarial_weight is not None:
+                if (
+                    adversarial_warmup_steps is not None
+                    or adversarial_weight is not None
+                ):
                     import warnings
+
                     warnings.warn(
                         "Using legacy adversarial parameters. "
                         "Please use adversarial_loss_calculator config instead.",
-                        DeprecationWarning
+                        DeprecationWarning,
                     )
                     self.adversarial_loss_calculator = AdversarialLossCalculator(
                         adversarial_weight=adversarial_weight or 1.0,
@@ -263,10 +272,12 @@ class VAELightningModule(pl.LightningModule):
                 self.log("val/fm_loss", adv_losses["fm_loss"], sync_dist=True)
 
                 # Discriminator loss
-                disc_losses = self.adversarial_loss_calculator.compute_discriminator_loss(
-                    discriminator=self.discriminator,
-                    real_audio=x,
-                    fake_audio=recon,
+                disc_losses = (
+                    self.adversarial_loss_calculator.compute_discriminator_loss(
+                        discriminator=self.discriminator,
+                        real_audio=x,
+                        fake_audio=recon,
+                    )
                 )
                 self.log("val/d_loss", disc_losses["d_loss"], sync_dist=True)
 

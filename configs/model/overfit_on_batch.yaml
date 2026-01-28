@@ -1,13 +1,13 @@
-# configs/model/vae.yaml
 _target_: src.model.VAELightningModule.VAELightningModule
+
 
 defaults:
   - architecture: architecture.yaml
   - loss_calculator: loss_calculator.yaml
   - optimizer: optimizer.yaml
   - scheduler: scheduler.yaml
-  - discriminator: discriminator.yaml
-  - adversarial_loss_calculator: adversarial_loss.yaml
+
+
 
 scheduler_interval: step
 scheduler_frequency: 1
@@ -18,13 +18,7 @@ sample_rate: ${datamodule.sample_rate}
 num_audio_samples: 2
 
 # Adversarial training
-use_adversarial: true
+use_adversarial: false
 discriminator_lr: 1e-4
 discriminator_update_every: 1
 generator_update_every: 1
-
-# Legacy parameters (deprecated - use adversarial_loss_calculator config instead)
-# These are kept for backward compatibility but will show deprecation warning
-# adversarial_warmup_steps: 0
-# adversarial_weight: 0.1
-# feature_matching_weight: 10.0

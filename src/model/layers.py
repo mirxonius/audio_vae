@@ -36,10 +36,18 @@ class ResidualUnit(nn.Module):
         self.block = nn.Sequential(
             Snake(channels),
             WNConv1d(
-                channels, channels, kernel_size, dilation=dilation, padding=padding
+                channels,
+                channels,
+                kernel_size,
+                dilation=dilation,
+                padding=padding,
             ),
             Snake(channels),
-            WNConv1d(channels, channels, kernel_size=1),
+            WNConv1d(
+                channels,
+                channels,
+                kernel_size=1,
+            ),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

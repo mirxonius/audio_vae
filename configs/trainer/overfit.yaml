@@ -3,7 +3,7 @@
 _target_: pytorch_lightning.Trainer
 
 # Training iterations
-max_steps: 1000
+max_epochs: 50
 
 # Hardware
 accelerator: gpu

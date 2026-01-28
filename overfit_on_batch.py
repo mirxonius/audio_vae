@@ -194,12 +194,13 @@ class SingleBatchDataModule(pl.LightningDataModule):
         return self.train_dataloader()
 
 
-def get_fixed_batch(cfg: DictConfig) -> torch.Tensor:
+def get_fixed_batch(cfg: DictConfig, batch_size: int = None) -> torch.Tensor:
     """
-    Get a single fixed batch from the original datamodule.
+    Get a single fixed batch with the same audio sample repeated.
 
     Args:
         cfg: Hydra configuration
+        batch_size: Number of times to repeat the sample. If None, uses cfg.datamodule.batch_size
 
     Returns:
         Fixed batch tensor of shape (batch_size, channels, samples)
@@ -208,16 +209,24 @@ def get_fixed_batch(cfg: DictConfig) -> torch.Tensor:
     datamodule = instantiate(cfg.datamodule)
     datamodule.setup("fit")
 
-    # Get one batch
+    # Get one batch and extract single sample
     dataloader = datamodule.train_dataloader()
     batch = next(iter(dataloader))
+    single_sample = batch[0:1]  # Shape: (1, channels, samples)
 
-    log.info(f"Cached batch shape: {batch.shape}")
+    # Determine batch size
+    if batch_size is None:
+        batch_size = cfg.datamodule.get("batch_size", len(batch))
+
+    # Repeat the same sample
+    fixed_batch = single_sample.repeat(batch_size, 1, 1)
+
+    log.info(f"Fixed batch shape: {fixed_batch.shape}")
     log.info(
-        f"Batch stats - min: {batch.min():.4f}, max: {batch.max():.4f}, mean: {batch.mean():.4f}"
+        f"Batch stats - min: {fixed_batch.min():.4f}, max: {fixed_batch.max():.4f}, mean: {fixed_batch.mean():.4f}"
     )
 
-    return batch
+    return fixed_batch
 
 
 @hydra.main(version_base="1.3", config_path="configs", config_name="overfit")
@@ -237,11 +246,11 @@ def main(cfg: DictConfig) -> None:
 
     # Get and cache a single batch from the original datamodule
     log.info("Fetching and caching single batch...")
-    batch = get_fixed_batch(cfg)
+    batch = get_fixed_batch(cfg, batch_size=4)
 
     # Create dummy datamodule with the cached batch
     datamodule = SingleBatchDataModule(
-        batch=batch, batch_size=len(batch), num_samples=8000
+        batch=batch, batch_size=len(batch), num_samples=800
     )
 
     # Instantiate model (uses existing VAELightningModule)

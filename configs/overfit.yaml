@@ -1,7 +1,7 @@
 defaults:
   - _self_
   - paths: paths
-  - model: audio_vae
+  - model: overfit_on_batch #audio_vae
   - datamodule: musdb18
   - trainer: overfit        # Uses overfit trainer with overfit_batches=1
   - logger: mlflow_overfit  # MLflow tracking for overfit runs
@@ -12,6 +12,3 @@ sample_rate: ${datamodule.sample_rate}
 print_config: true
 log_hyperparameters: true   # Log hyperparameters to MLflow
 
-
-override: 
- -model/optimizer/lr: 1e-3

@@ -92,7 +92,7 @@ class SpectralConvergenceLoss(torch.nn.Module):
         return (
             (
                 torch.norm(y_mag - x_mag, p="fro", dim=[-1, -2])
-                / torch.norm(y_mag + 1e-5, p="fro", dim=[-1, -2])
+                / (torch.norm(y_mag, p="fro", dim=[-1, -2]) + 1e-5)
             )
             .unsqueeze(-1)
             .unsqueeze(-1)
