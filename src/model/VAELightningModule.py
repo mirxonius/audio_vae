@@ -42,6 +42,9 @@ class VAELightningModule(pl.LightningModule):
         discriminator_lr: float = 3e-4,
         discriminator_update_every: int = 1,
         generator_update_every: int = 1,
+        # Encoder freezing parameters
+        freeze_encoder_after_steps: Optional[int] = None,
+        freeze_encoder_after_epochs: Optional[int] = None,
         # Legacy parameters (for backward compatibility)
         adversarial_warmup_steps: Optional[int] = None,
         adversarial_weight: Optional[float] = None,
@@ -117,6 +120,12 @@ class VAELightningModule(pl.LightningModule):
         self.sample_rate = sample_rate
         self.num_audio_samples = num_audio_samples
 
+        # Encoder freezing configuration
+        self.freeze_encoder_after_steps = freeze_encoder_after_steps
+        self.freeze_encoder_after_epochs = freeze_encoder_after_epochs
+        self._encoder_frozen = False
+        self._optimizer_reconfigured = False
+
         # Automatic optimization disabled for adversarial training
         if self.use_adversarial:
             self.automatic_optimization = False
@@ -126,6 +135,97 @@ class VAELightningModule(pl.LightningModule):
         if not self.use_adversarial or self.adversarial_loss_calculator is None:
             return False
         return self.adversarial_loss_calculator.is_active(self.global_step)
+
+    def should_freeze_encoder(self) -> bool:
+        """Check if encoder should be frozen based on steps or epochs."""
+        if self._encoder_frozen:
+            return False  # Already frozen
+
+        # Check step-based threshold
+        if self.freeze_encoder_after_steps is not None:
+            if self.global_step >= self.freeze_encoder_after_steps:
+                return True
+
+        # Check epoch-based threshold
+        if self.freeze_encoder_after_epochs is not None:
+            if self.current_epoch >= self.freeze_encoder_after_epochs:
+                return True
+
+        return False
+
+    def freeze_encoder(self):
+        """
+        Freeze the encoder and reconfigure optimizers to only train decoder.
+
+        This method:
+        1. Freezes all encoder parameters
+        2. Reconfigures the optimizer to only include decoder (and discriminator if applicable)
+        """
+        if self._encoder_frozen:
+            return
+
+        # Freeze encoder in the model
+        self.model._freeze_encoder()
+        self._encoder_frozen = True
+
+        # Log the freezing event
+        self.log("encoder_frozen", 1.0)
+        print(
+            f"\n{'='*60}\n"
+            f"ENCODER FROZEN at step {self.global_step}, epoch {self.current_epoch}\n"
+            f"Only decoder will be trained from now on.\n"
+            f"{'='*60}\n"
+        )
+
+        # Reconfigure optimizers to only train decoder parameters
+        self._reconfigure_optimizers_for_decoder_only()
+
+    def _reconfigure_optimizers_for_decoder_only(self):
+        """Reconfigure optimizers to only include decoder (and latent stats) parameters."""
+        if self._optimizer_reconfigured:
+            return
+
+        # Get decoder parameters (includes latent_mean and latent_std)
+        decoder_params = list(self.model.decoder.parameters()) + [
+            self.model.latent_mean,
+            self.model.latent_std,
+        ]
+
+        if not self.use_adversarial:
+            # Standard training: single optimizer
+            opt = self.optimizers()
+            # Create new optimizer with only decoder params, preserving learning rate
+            current_lr = opt.param_groups[0]["lr"]
+            new_opt = torch.optim.AdamW(
+                decoder_params,
+                lr=current_lr,
+                betas=(0.9, 0.999),
+                weight_decay=1e-4,
+            )
+            # Replace optimizer
+            self.trainer.optimizers[0] = new_opt
+        else:
+            # Adversarial training: two optimizers (generator, discriminator)
+            opt_g, opt_d = self.optimizers()
+
+            # Create new generator optimizer with only decoder params
+            current_lr = opt_g.param_groups[0]["lr"]
+            new_opt_g = torch.optim.AdamW(
+                decoder_params,
+                lr=current_lr,
+                betas=(0.9, 0.999),
+                weight_decay=1e-4,
+            )
+            # Replace generator optimizer, keep discriminator unchanged
+            self.trainer.optimizers[0] = new_opt_g
+
+        self._optimizer_reconfigured = True
+        print(f"Optimizer reconfigured: now training {len(decoder_params)} decoder parameters only.")
+
+    def on_train_batch_start(self, batch, batch_idx):
+        """Hook to check and freeze encoder if threshold reached."""
+        if self.should_freeze_encoder():
+            self.freeze_encoder()
 
     def forward(
         self, x: torch.Tensor
@@ -363,11 +463,40 @@ class VAELightningModule(pl.LightningModule):
             "dilations": self.model.encoder.dilations,
         }
 
+        # Save encoder frozen state
+        checkpoint["encoder_frozen"] = self._encoder_frozen
+        checkpoint["optimizer_reconfigured"] = self._optimizer_reconfigured
+
+    def on_load_checkpoint(self, checkpoint):
+        """
+        Called when loading a checkpoint.
+        Restores encoder frozen state.
+        """
+        # Restore encoder frozen state if saved
+        if checkpoint.get("encoder_frozen", False):
+            self._encoder_frozen = True
+            self._optimizer_reconfigured = checkpoint.get("optimizer_reconfigured", False)
+            # Re-freeze encoder parameters
+            self.model._freeze_encoder()
+            print(f"Loaded checkpoint with encoder frozen. Encoder will remain frozen.")
+
+    def _get_trainable_generator_params(self):
+        """Get generator parameters that should be trained (respects encoder freeze)."""
+        if self._encoder_frozen:
+            # Only decoder and latent statistics
+            return list(self.model.decoder.parameters()) + [
+                self.model.latent_mean,
+                self.model.latent_std,
+            ]
+        else:
+            # All model parameters
+            return list(self.model.parameters())
+
     def configure_optimizers(self):
         """Configure optimizers and schedulers"""
         if not self.use_adversarial:
             # Standard single optimizer setup
-            optimizer = self.optimizer_config(params=self.model.parameters())
+            optimizer = self.optimizer_config(params=self._get_trainable_generator_params())
 
             # Calculate total steps for scheduler
             if hasattr(self.trainer, "estimated_stepping_batches"):
@@ -399,7 +528,7 @@ class VAELightningModule(pl.LightningModule):
             }
         else:
             # Adversarial training: two optimizers
-            opt_g = self.optimizer_config(params=self.model.parameters())
+            opt_g = self.optimizer_config(params=self._get_trainable_generator_params())
             opt_d = torch.optim.AdamW(
                 self.discriminator.parameters(),
                 lr=self.discriminator_lr,

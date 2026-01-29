@@ -23,6 +23,12 @@ discriminator_lr: 1e-4
 discriminator_update_every: 1
 generator_update_every: 1
 
+# Encoder freezing for decoder finetuning
+# Set one of these to enable encoder freezing after the specified threshold
+# When frozen, only the decoder is trained with reconstruction + adversarial loss
+freeze_encoder_after_steps: null   # Freeze encoder after N training steps (null = disabled)
+freeze_encoder_after_epochs: null  # Freeze encoder after N epochs (null = disabled)
+
 # Legacy parameters (deprecated - use adversarial_loss_calculator config instead)
 # These are kept for backward compatibility but will show deprecation warning
 # adversarial_warmup_steps: 0
