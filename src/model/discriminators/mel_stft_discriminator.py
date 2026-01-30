@@ -4,6 +4,8 @@ Multi-Scale Mel-STFT Discriminator.
 Operates on mel spectrograms at multiple scales for perceptually-motivated
 audio discrimination. Mel scaling better matches human auditory perception
 compared to linear-frequency STFT discriminators.
+
+Uses torchaudio.transforms.MelSpectrogram for robust mel spectrogram computation.
 """
 
 from typing import List, Tuple, Optional
@@ -11,6 +13,7 @@ from typing import List, Tuple, Optional
 import torch
 import torch.nn as nn
 from torch.nn.utils import weight_norm
+from torchaudio.transforms import MelSpectrogram
 from einops import rearrange
 
 from .utils import get_2d_padding
@@ -20,8 +23,8 @@ class DiscriminatorMelSTFT(nn.Module):
     """
     Single Mel-STFT discriminator operating at one scale.
 
-    Computes mel spectrogram from audio and processes with 2D convolutions
-    in time-frequency domain.
+    Computes mel spectrogram from audio using torchaudio and processes
+    with 2D convolutions in time-frequency domain.
     """
 
     def __init__(
@@ -30,13 +33,17 @@ class DiscriminatorMelSTFT(nn.Module):
         in_channels: int = 1,
         n_fft: int = 1024,
         hop_length: int = 256,
-        win_length: int = 1024,
+        win_length: Optional[int] = None,
         n_mels: int = 80,
         sample_rate: int = 44100,
         f_min: float = 0.0,
         f_max: Optional[float] = None,
         kernel_size: Tuple[int, int] = (3, 9),
         dilations: List[int] = [1, 2, 4],
+        power: float = 1.0,
+        normalized: bool = False,
+        norm: Optional[str] = "slaney",
+        mel_scale: str = "slaney",
         use_log: bool = True,
         log_eps: float = 1e-5,
     ):
@@ -46,34 +53,42 @@ class DiscriminatorMelSTFT(nn.Module):
             in_channels: Number of audio input channels (1 for mono, 2 for stereo)
             n_fft: FFT size
             hop_length: Hop length for STFT
-            win_length: Window length for STFT
+            win_length: Window length for STFT (default: n_fft)
             n_mels: Number of mel filterbank channels
             sample_rate: Audio sample rate for mel filterbank
             f_min: Minimum frequency for mel filterbank
             f_max: Maximum frequency for mel filterbank (default: sample_rate / 2)
             kernel_size: Kernel size for 2D convolutions (freq, time)
             dilations: List of dilation rates in time dimension
+            power: Exponent for the magnitude spectrogram (1.0 for energy, 2.0 for power)
+            normalized: Whether to normalize mel filterbank weights
+            norm: Normalization type for mel filterbank ('slaney' or None)
+            mel_scale: Scale to use for mel filterbank ('htk' or 'slaney')
             use_log: Whether to use log mel spectrogram
             log_eps: Epsilon for log computation
         """
         super().__init__()
         self.in_channels = in_channels
-        self.n_fft = n_fft
-        self.hop_length = hop_length
-        self.win_length = win_length
-        self.n_mels = n_mels
-        self.sample_rate = sample_rate
-        self.f_min = f_min
-        self.f_max = f_max if f_max is not None else sample_rate / 2.0
         self.use_log = use_log
         self.log_eps = log_eps
 
-        # Register window buffer
-        self.register_buffer("window", torch.hann_window(win_length))
+        if win_length is None:
+            win_length = n_fft
 
-        # Create mel filterbank
-        mel_fb = self._create_mel_filterbank()
-        self.register_buffer("mel_filterbank", mel_fb)
+        # Use torchaudio's MelSpectrogram transform
+        self.mel_transform = MelSpectrogram(
+            sample_rate=sample_rate,
+            n_fft=n_fft,
+            win_length=win_length,
+            hop_length=hop_length,
+            f_min=f_min,
+            f_max=f_max,
+            n_mels=n_mels,
+            power=power,
+            normalized=normalized,
+            norm=norm,
+            mel_scale=mel_scale,
+        )
 
         # Convolution layers
         self.conv_layers = nn.ModuleList()
@@ -115,55 +130,9 @@ class DiscriminatorMelSTFT(nn.Module):
 
         self.activation = nn.LeakyReLU(0.1)
 
-    def _create_mel_filterbank(self) -> torch.Tensor:
-        """Create mel filterbank matrix."""
-        # Number of frequency bins in STFT
-        n_freqs = self.n_fft // 2 + 1
-
-        # Compute mel points
-        mel_min = self._hz_to_mel(self.f_min)
-        mel_max = self._hz_to_mel(self.f_max)
-        mel_points = torch.linspace(mel_min, mel_max, self.n_mels + 2)
-        hz_points = self._mel_to_hz(mel_points)
-
-        # Convert to FFT bin indices
-        bin_points = torch.floor(
-            (self.n_fft + 1) * hz_points / self.sample_rate
-        ).long()
-
-        # Create filterbank
-        filterbank = torch.zeros(self.n_mels, n_freqs)
-
-        for i in range(self.n_mels):
-            left = bin_points[i]
-            center = bin_points[i + 1]
-            right = bin_points[i + 2]
-
-            # Rising slope
-            for j in range(left, center):
-                if center != left:
-                    filterbank[i, j] = (j - left) / (center - left)
-
-            # Falling slope
-            for j in range(center, right):
-                if right != center:
-                    filterbank[i, j] = (right - j) / (right - center)
-
-        return filterbank
-
-    @staticmethod
-    def _hz_to_mel(hz: torch.Tensor) -> torch.Tensor:
-        """Convert Hz to mel scale."""
-        return 2595.0 * torch.log10(1.0 + hz / 700.0)
-
-    @staticmethod
-    def _mel_to_hz(mel: torch.Tensor) -> torch.Tensor:
-        """Convert mel scale to Hz."""
-        return 700.0 * (10.0 ** (mel / 2595.0) - 1.0)
-
     def _compute_mel_spectrogram(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Compute mel spectrogram from audio.
+        Compute mel spectrogram from audio using torchaudio.
 
         Args:
             x: [B, C, T] audio tensor
@@ -173,36 +142,19 @@ class DiscriminatorMelSTFT(nn.Module):
         """
         B, C, T = x.shape
 
-        # Flatten batch and channels for STFT
+        # Flatten batch and channels for mel transform
         x_flat = x.reshape(B * C, T)
 
-        # Compute STFT
-        stft = torch.stft(
-            x_flat,
-            n_fft=self.n_fft,
-            hop_length=self.hop_length,
-            win_length=self.win_length,
-            window=self.window,
-            return_complex=True,
-            center=True,
-        )
-        # stft: [B*C, n_fft//2+1, n_frames]
-
-        # Compute magnitude spectrogram
-        magnitude = torch.abs(stft)
-
-        # Apply mel filterbank: [n_mels, n_freqs] @ [B*C, n_freqs, n_frames]
-        # Transpose to [B*C, n_frames, n_freqs], apply filterbank, transpose back
-        mel = torch.matmul(self.mel_filterbank, magnitude)
-        # mel: [B*C, n_mels, n_frames]
+        # Compute mel spectrogram: [B*C, n_mels, n_frames]
+        mel = self.mel_transform(x_flat)
 
         # Apply log compression if enabled
         if self.use_log:
             mel = torch.log(mel + self.log_eps)
 
         # Reshape back to [B, C, n_mels, n_frames]
-        n_frames = mel.shape[-1]
-        mel = mel.reshape(B, C, self.n_mels, n_frames)
+        n_mels, n_frames = mel.shape[-2], mel.shape[-1]
+        mel = mel.reshape(B, C, n_mels, n_frames)
 
         return mel
 
@@ -253,6 +205,10 @@ class MultiScaleMelSTFTDiscriminator(nn.Module):
         sample_rate: int = 44100,
         f_min: float = 0.0,
         f_max: Optional[float] = None,
+        power: float = 1.0,
+        normalized: bool = False,
+        norm: Optional[str] = "slaney",
+        mel_scale: str = "slaney",
         use_log: bool = True,
     ):
         """
@@ -266,6 +222,10 @@ class MultiScaleMelSTFTDiscriminator(nn.Module):
             sample_rate: Audio sample rate
             f_min: Minimum frequency for mel filterbank
             f_max: Maximum frequency for mel filterbank
+            power: Exponent for the magnitude spectrogram
+            normalized: Whether to normalize mel filterbank weights
+            norm: Normalization type for mel filterbank
+            mel_scale: Scale to use for mel filterbank
             use_log: Whether to use log mel spectrogram
         """
         super().__init__()
@@ -296,6 +256,10 @@ class MultiScaleMelSTFTDiscriminator(nn.Module):
                     sample_rate=sample_rate,
                     f_min=f_min,
                     f_max=f_max,
+                    power=power,
+                    normalized=normalized,
+                    norm=norm,
+                    mel_scale=mel_scale,
                     use_log=use_log,
                 )
                 for n_fft, hop_length, win_length, n_mel in zip(
