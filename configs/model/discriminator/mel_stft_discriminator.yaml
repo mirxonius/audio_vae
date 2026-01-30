@@ -1,0 +1,21 @@
+# Multi-Scale Mel-STFT Discriminator Configuration
+# Standalone perceptually-motivated discriminator using mel spectrograms
+_target_: src.model.discriminators.mel_stft_discriminator.MultiScaleMelSTFTDiscriminator
+
+# Base architecture parameters
+filters: 32
+in_channels: 2  # Stereo audio
+
+# Multi-scale STFT parameters
+n_ffts: [2048, 1024, 512, 256, 128]
+hop_lengths: null  # Defaults to n_fft // 4
+win_lengths: null  # Defaults to n_fft
+
+# Mel filterbank parameters
+n_mels: [128, 128, 80, 64, 32]  # Mel bins per scale
+sample_rate: 44100
+f_min: 0.0
+f_max: null  # Defaults to sample_rate / 2
+
+# Log compression
+use_log: true
