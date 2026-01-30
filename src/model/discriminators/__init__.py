@@ -7,7 +7,8 @@ Includes:
 1. MS-STFT Discriminator: Operates on complex-valued STFTs at multiple scales
 2. Multi-Scale Discriminator (MSD): Operates on waveforms at multiple scales
 3. Multi-Period Discriminator (MPD): Operates on waveforms reshaped by period
-4. EnCodec Discriminator: Combined discriminator using all of the above
+4. Mel-STFT Discriminator: Operates on mel spectrograms at multiple scales
+5. EnCodec Discriminator: Combined discriminator using all of the above
 """
 
 from .utils import get_2d_padding
@@ -33,6 +34,11 @@ from .period_discriminator import (
     MultiPeriodDiscriminator,
 )
 
+from .mel_stft_discriminator import (
+    DiscriminatorMelSTFT,
+    MultiScaleMelSTFTDiscriminator,
+)
+
 from .EncodecDiscriminator import EnCodecDiscriminator
 
 
@@ -52,6 +58,9 @@ __all__ = [
     # Period Discriminators
     "PeriodDiscriminator",
     "MultiPeriodDiscriminator",
+    # Mel-STFT Discriminators
+    "DiscriminatorMelSTFT",
+    "MultiScaleMelSTFTDiscriminator",
     # Combined
     "EnCodecDiscriminator",
 ]
