@@ -41,7 +41,9 @@ class ScaleDiscriminator(nn.Module):
                     nn.Conv1d(256, 256, kernel_size=41, stride=4, padding=20, groups=64)
                 ),
                 weight_norm(
-                    nn.Conv1d(256, 512, kernel_size=41, stride=4, padding=20, groups=256)
+                    nn.Conv1d(
+                        256, 512, kernel_size=41, stride=4, padding=20, groups=256
+                    )
                 ),
                 weight_norm(nn.Conv1d(512, 512, kernel_size=5, stride=1, padding=2)),
             ]

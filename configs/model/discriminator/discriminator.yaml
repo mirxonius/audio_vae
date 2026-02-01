@@ -16,10 +16,10 @@ mpd_periods: [2, 3, 5, 7, 11]  # Periods for MPD
 mpd_channels: [32, 128, 512, 512, 1024]  # Channel progression
 
 # Mel-STFT Discriminator parameters (perceptually-motivated)
-use_mel_stft: false  # Set to true to enable
+use_mel_stft: true  # Set to true to enable
 mel_stft_filters: 32
 mel_stft_n_ffts: [2048, 1024, 512, 256, 128]
 mel_stft_n_mels: [128, 128, 80, 64, 32]
-mel_stft_sample_rate: 44100
+mel_stft_sample_rate: ${datamodule.sample_rate}
 mel_stft_f_min: 0.0
 mel_stft_f_max: null
