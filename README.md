@@ -2,6 +2,8 @@
 
 A PyTorch Lightning implementation of an Encodec-style Audio Variational Autoencoder (VAE) for high-quality audio reconstruction and compression. This project combines reconstruction losses, perceptual losses, and optional adversarial training for state-of-the-art audio generation.
 
+You can find an extended blog assoicated with this repository [here](https://mirxonius.github.io/2026-01-16-autoencoders-audio/).
+
 ## Features
 
 - **Variational Autoencoder Architecture**: Encoder-decoder architecture with latent space compression
